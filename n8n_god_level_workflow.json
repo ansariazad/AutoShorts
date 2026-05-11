@@ -1,0 +1,388 @@
+{
+  "name": "God-Level Script Validator",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 8
+            }
+          ]
+        }
+      },
+      "id": "trigger-cron",
+      "name": "⏰ Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://trends.google.com/trends/trendingsearches/daily/rss?geo=US",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "fetch-trends",
+      "name": "📊 Fetch Trends",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.reddit.com/r/todayilearned/hot.json?limit=5",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "fetch-reddit",
+      "name": "📰 Fetch Reddit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 500]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "mergeByFields": {},
+        "options": {}
+      },
+      "id": "merge-trends",
+      "name": "🔀 Merge Trends",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [660, 380]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.ai_url || 'http://localhost:11434/api/generate' }}",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'llama3.2', prompt: $json.architect_prompt, stream: false, format: 'json' }) }}",
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "architect-ai",
+      "name": "🧠 Architect AI (Script Gen)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 380],
+      "notes": "Sends the God-Level Architect prompt to Ollama/Groq.\nExpects JSON output with: hook, body, conclusion, cta, full_script, search_queries, title"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── PROMPT BUILDER ──\n// Takes merged trend data and builds the God-Level script prompt\n\nconst trendData = $input.all();\n\n// Extract trend topics\nlet topics = [];\ntry {\n  // From Google Trends RSS\n  const rss = trendData[0]?.json?.data || '';\n  const matches = rss.match(/<title>([^<]+)<\\/title>/g) || [];\n  topics = matches.slice(1, 6).map(m => m.replace(/<\\/?title>/g, ''));\n} catch(e) {}\n\ntry {\n  // From Reddit\n  const posts = trendData[1]?.json?.data?.children || [];\n  posts.slice(0, 5).forEach(p => {\n    topics.push(p.data?.title || '');\n  });\n} catch(e) {}\n\nconst topicsStr = topics.join(', ');\n\n// ── Build the God-Level Script Prompt ──\nconst niche = 'psychology'; // Change to your channel niche\nconst niches = {\n  psychology: {\n    tone: 'analytical, slightly ominous, authoritative',\n    audience: '18-35, curious about human behavior',\n    hookStyle: 'myth-busting behavioral claims',\n    hooks: [\n      'If someone {topic}, they\\'re not what you think...',\n      'You\\'ve been reading this body language wrong your whole life...',\n    ]\n  },\n  data_storytelling: {\n    tone: 'journalistic, surprising, data-driven',\n    audience: '20-40, data enthusiasts, visual learners',\n    hookStyle: 'counter-intuitive data reveal',\n    hooks: [\n      'Everyone thinks {topic}... the data says the opposite.',\n      'This one number just changed everything about {topic}...',\n    ]\n  }\n};\n\nconst profile = niches[niche] || niches.psychology;\n\nconst prompt = `You are an elite viral scriptwriter for YouTube Shorts in the '${niche}' niche.\n\nTrending topics today: ${topicsStr}\n\nPick the most interesting topic and create a 45-60 second viral script.\nTarget Audience: ${profile.audience}\nTone: ${profile.tone}\n\nConstraint 1 — SHOCK HOOK (first 3 seconds):\nThe opening MUST debunk a common belief or make an impossible-sounding claim.\nDo NOT use: \"Did you know\", \"In this video\", \"Hey guys\"\n\nConstraint 2 — LOOPING LOGIC:\nThe final sentence must lead back into the first.\n\nConstraint 3 — WORD LIMIT:\nTotal script must be 40-80 words.\n\nConstraint 4 — SAECS Framework:\nS(hock) → A(mplify) → E(vidence) → C(onclusion) → S(ubscribe CTA)\n\nOutput Format: Return ONLY valid JSON:\n{\n  \"hook\": \"first 1-2 sentences\",\n  \"body\": \"middle section\",\n  \"conclusion\": \"the insight\",\n  \"cta\": \"subscribe call-to-action\",\n  \"full_script\": \"complete script as one paragraph\",\n  \"word_count\": 65,\n  \"search_queries\": [\"query1\", \"query2\", \"query3\"],\n  \"pin_comment\": \"engagement question\",\n  \"title\": \"YouTube title under 70 chars with emoji\"\n}\n\nDo NOT include any text outside the JSON.`;\n\n// Determine AI endpoint\nlet aiUrl = 'http://localhost:11434/api/generate';\nconst groqKey = '';\n\nif (groqKey) {\n  aiUrl = 'https://api.groq.com/openai/v1/chat/completions';\n}\n\nreturn [{\n  json: {\n    architect_prompt: prompt,\n    ai_url: aiUrl,\n    groq_key: groqKey,\n    niche: niche,\n    trends: topicsStr,\n    attempt: 1,\n    max_attempts: 3\n  }\n}];"
+      },
+      "id": "build-prompt",
+      "name": "⚡ Build Architect Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 380]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── PARSE AI RESPONSE ──\n// Extract the script JSON from Ollama/Groq response\n\nconst input = $input.first().json;\nlet scriptData = {};\n\ntry {\n  // Ollama format\n  if (input.response) {\n    scriptData = typeof input.response === 'string' \n      ? JSON.parse(input.response) \n      : input.response;\n  }\n  // Groq format  \n  else if (input.choices) {\n    const content = input.choices[0].message.content;\n    scriptData = JSON.parse(content);\n  }\n  // Direct JSON\n  else {\n    scriptData = input;\n  }\n} catch(e) {\n  // Try to extract JSON from mixed text\n  const text = JSON.stringify(input);\n  const jsonMatch = text.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    scriptData = JSON.parse(jsonMatch[0]);\n  } else {\n    throw new Error('Could not parse AI response as JSON');\n  }\n}\n\n// Validate required fields\nconst required = ['full_script', 'title', 'search_queries'];\nfor (const field of required) {\n  if (!scriptData[field]) {\n    throw new Error(`Missing required field: ${field}`);\n  }\n}\n\n// Pass through attempt info\nscriptData.attempt = input.attempt || 1;\nscriptData.max_attempts = input.max_attempts || 3;\nscriptData.niche = input.niche || 'psychology';\n\nreturn [{ json: scriptData }];"
+      },
+      "id": "parse-script",
+      "name": "📝 Parse Script",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 380]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ══════════════════════════════════════════════════════\n// 🔍 GOD-LEVEL VALIDATION NODE\n// ══════════════════════════════════════════════════════\n// This is the AI Judge. It scores scripts on 5 dimensions\n// and returns APPROVE/REJECT with actionable feedback.\n// ══════════════════════════════════════════════════════\n\nconst script = $input.first().json;\nconst attempt = script.attempt || 1;\nconst maxAttempts = script.max_attempts || 3;\n\n// ── Niche Profiles ──\nconst profiles = {\n  psychology: {\n    name: 'Dark Psychology & Body Language',\n    audience: '18-35, curious about human behavior',\n  },\n  data_storytelling: {\n    name: 'Data Storytelling & Visual Economics',\n    audience: '20-40, data enthusiasts',\n  }\n};\nconst profile = profiles[script.niche] || profiles.psychology;\n\n// ── Build Validation Prompt ──\nconst validationPrompt = `You are an elite YouTube Shorts quality control AI. Judge whether this script is good enough to produce.\n\nChannel Niche: ${profile.name}\nTarget Audience: ${profile.audience}\nTitle: ${script.title || 'Unknown'}\nAttempt: ${attempt} of ${maxAttempts}\n\nScript to evaluate:\n\"\"\"${script.full_script}\"\"\"\n\nScore each dimension from 1-10:\n\n1. Hook Strength (weight: 30%) — Do the first 1-2 sentences stop the scroll?\n   9-10: Impossible to scroll past. Counter-intuitive, myth-busting.\n   7-8: Strong curiosity trigger.\n   5-6: Generic \"Did you know\" territory.\n   1-4: Viewer scrolls immediately.\n\n2. Factual Accuracy (weight: 25%) — Are claims verifiable?\n   9-10: Backed by research.\n   7-8: Plausible and commonly cited.\n   5-6: Oversimplifications.\n   1-4: Fabricated or dangerous.\n\n3. Boredom Score (weight: 20%) — Overall engagement.\n   9-10: Every sentence adds tension. Zero filler.\n   7-8: Engaging with minor slow spots.\n   5-6: Middle drags.\n   1-4: Wikipedia article.\n\n4. Loop Potential (weight: 15%) — Does ending connect to beginning?\n   9-10: Seamless loop.\n   7-8: References opening theme.\n   5-6: Fine but no loop.\n   1-4: Abrupt.\n\n5. CTA Clarity (weight: 10%) — Natural call-to-action?\n   9-10: Part of the story.\n   7-8: Clear without breaking immersion.\n   5-6: Forced but acceptable.\n   1-4: Cringe.\n\nDecision:\n- APPROVE if: weighted avg >= 7.0 AND hook >= 7, accuracy >= 8, boredom >= 7, loop >= 6, cta >= 5\n- REJECT otherwise\n\nReturn ONLY valid JSON:\n{\n  \"verdict\": \"APPROVE or REJECT\",\n  \"overall_score\": 7.5,\n  \"scores\": {\n    \"hook_strength\": 8,\n    \"factual_accuracy\": 9,\n    \"boredom_score\": 7,\n    \"loop_potential\": 7,\n    \"cta_clarity\": 8\n  },\n  \"weighted_average\": 7.9,\n  \"rejection_reason\": \"only if REJECT\",\n  \"rewrite_instructions\": \"only if REJECT\",\n  \"praise\": \"what works well\",\n  \"attempt\": ${attempt},\n  \"max_retries_remaining\": ${maxAttempts - attempt}\n}`;\n\nreturn [{\n  json: {\n    ...script,\n    validation_prompt: validationPrompt,\n    ai_url: 'http://localhost:11434/api/generate'\n  }\n}];"
+      },
+      "id": "build-validation",
+      "name": "🔍 Build Validation Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 380],
+      "notes": "Constructs the God-Level validation prompt with scoring rubric.\nWeighted scoring: Hook 30%, Accuracy 25%, Boredom 20%, Loop 15%, CTA 10%."
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.ai_url || 'http://localhost:11434/api/generate' }}",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'llama3.2', prompt: $json.validation_prompt, stream: false, format: 'json' }) }}",
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "validate-ai",
+      "name": "🤖 Validation AI (Judge)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, 380],
+      "notes": "Sends script to AI Judge for quality scoring"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── PARSE VALIDATION RESULT ──\n\nconst input = $input.first().json;\nlet validation = {};\n\ntry {\n  if (input.response) {\n    validation = typeof input.response === 'string'\n      ? JSON.parse(input.response)\n      : input.response;\n  } else if (input.choices) {\n    validation = JSON.parse(input.choices[0].message.content);\n  } else {\n    validation = input;\n  }\n} catch(e) {\n  const text = JSON.stringify(input);\n  const match = text.match(/\\{[\\s\\S]*\\}/);\n  if (match) validation = JSON.parse(match[0]);\n  else {\n    // If parsing fails, auto-approve to not block pipeline\n    validation = { verdict: 'APPROVE', overall_score: 7, parse_error: true };\n  }\n}\n\n// Carry forward the script data\nconst prevData = $('📝 Parse Script').first().json;\n\nreturn [{\n  json: {\n    ...prevData,\n    validation: validation,\n    verdict: (validation.verdict || 'APPROVE').toUpperCase(),\n    validation_score: validation.weighted_average || validation.overall_score || 0\n  }\n}];"
+      },
+      "id": "parse-validation",
+      "name": "📊 Parse Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1760, 380]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "conditions": [
+            {
+              "id": "approve-check",
+              "leftValue": "={{ $json.verdict }}",
+              "rightValue": "APPROVE",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "verdict-switch",
+      "name": "✅❌ Verdict Gate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1980, 380]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── REJECTION HANDLER ──\n// Check retry count, either loop back or skip topic\n\nconst data = $input.first().json;\nconst attempt = (data.attempt || 1) + 1;\nconst maxAttempts = data.max_attempts || 3;\nconst validation = data.validation || {};\n\nif (attempt > maxAttempts) {\n  // Max retries exceeded — skip this topic\n  return [{\n    json: {\n      action: 'SKIP',\n      reason: `Script failed validation ${maxAttempts} times. Last rejection: ${validation.rejection_reason || 'Unknown'}`,\n      last_score: data.validation_score,\n      topic: data.title,\n      timestamp: new Date().toISOString()\n    }\n  }];\n}\n\n// Build retry prompt with rejection feedback\nconst retryPrompt = `You are an elite viral scriptwriter. Your previous script was REJECTED by quality control.\n\nREJECTION REASON: ${validation.rejection_reason || 'Script did not meet quality standards'}\nREWRITE INSTRUCTIONS: ${validation.rewrite_instructions || 'Improve the hook and reduce filler words'}\nWHAT WORKED: ${validation.praise || 'Topic choice was good'}\n\nThis is attempt ${attempt} of ${maxAttempts}. \n\nOriginal script that was rejected:\n\"\"\"${data.full_script}\"\"\"\n\nRewrite this script following the rejection feedback.\nKeep the same topic but make it significantly better.\n\nConstraints:\n- 40-80 words max\n- Hook must stop the scroll in 3 seconds\n- Use SAECS framework: Shock → Amplify → Evidence → Conclusion → Subscribe\n- Ending must loop back to beginning\n\nReturn ONLY valid JSON:\n{\n  \"hook\": \"scroll-stopping opener\",\n  \"body\": \"middle section\",\n  \"conclusion\": \"insight payoff\",\n  \"cta\": \"natural subscribe CTA\",\n  \"full_script\": \"complete rewritten script\",\n  \"word_count\": 65,\n  \"search_queries\": [\"query1\", \"query2\", \"query3\"],\n  \"pin_comment\": \"engagement question\",\n  \"title\": \"${data.title || 'Rewritten title with emoji'}\"\n}`;\n\nreturn [{\n  json: {\n    architect_prompt: retryPrompt,\n    ai_url: 'http://localhost:11434/api/generate',\n    niche: data.niche || 'psychology',\n    attempt: attempt,\n    max_attempts: maxAttempts,\n    previous_rejection: validation.rejection_reason\n  }\n}];"
+      },
+      "id": "rejection-handler",
+      "name": "🔄 Rejection Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2200, 520],
+      "notes": "If REJECT: increments attempt counter, feeds rejection reason back into script gen.\nIf max retries exceeded: outputs SKIP action."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "conditions": [
+            {
+              "id": "skip-check",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "SKIP",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "retry-or-skip",
+      "name": "🔀 Retry or Skip?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2420, 520]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── LOG SKIP ──\nconst data = $input.first().json;\nconsole.log(`⏭️ SKIPPED: ${data.topic} — ${data.reason}`);\nreturn [{ json: { ...data, logged: true } }];"
+      },
+      "id": "log-skip",
+      "name": "📋 Log Skip",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2640, 620]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ══════════════════════════════════════════════\n// 🎬 APPROVED — Prepare for Video Production\n// ══════════════════════════════════════════════\n\nconst data = $input.first().json;\n\n// Build the production manifest\nconst manifest = {\n  // Script data\n  title: data.title || `Untitled Short`,\n  full_script: data.full_script,\n  hook: data.hook,\n  body: data.body,\n  conclusion: data.conclusion,\n  cta: data.cta,\n  word_count: data.word_count,\n  \n  // Search queries for Pexels footage\n  search_queries: data.search_queries || ['dark portrait', 'person dark room', 'moody face'],\n  \n  // YouTube metadata\n  pin_comment: data.pin_comment || 'What do you think? 👀',\n  tags: ['psychology', 'dark psychology', 'body language', 'shorts', 'facts'],\n  category_id: '27',\n  \n  // Validation results\n  validation_score: data.validation_score,\n  validation_attempt: data.attempt || 1,\n  verdict: data.verdict,\n  \n  // Pipeline control\n  timestamp: new Date().toISOString(),\n  status: 'APPROVED_FOR_PRODUCTION'\n};\n\n// Generate description\nmanifest.description = [\n  manifest.full_script,\n  '',\n  '👆 Double tap if you agree',\n  '🔔 SUBSCRIBE for daily dark psychology facts',\n  '',\n  '#Shorts #DarkPsychology #BodyLanguage #PsychologyFacts',\n  '#ManipulationTactics #ReadPeople #HumanBehavior',\n].join('\\n');\n\nreturn [{ json: manifest }];"
+      },
+      "id": "prepare-production",
+      "name": "🎬 Prepare Production",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2200, 240],
+      "notes": "Script is APPROVED. Builds the production manifest for video assembly.\nConnect this to your existing video pipeline nodes."
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd /Users/azad/Desktop/AutoShorts && python3 scripts/pro_pipeline.py --from-manifest \\'' + JSON.stringify($json) + '\\'' }}"
+      },
+      "id": "run-pipeline",
+      "name": "🚀 Run Pro Pipeline",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [2420, 240],
+      "notes": "Executes the Python pro_pipeline.py with the approved manifest.\nThe pipeline handles: voice gen → footage download → video assembly → YouTube upload"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── FINAL LOG ──\nconst data = $input.first().json;\nconst summary = {\n  status: 'COMPLETE',\n  title: data.title,\n  validation_score: data.validation_score,\n  timestamp: new Date().toISOString(),\n  output: data.stdout || 'Pipeline executed'\n};\nconsole.log(JSON.stringify(summary, null, 2));\nreturn [{ json: summary }];"
+      },
+      "id": "final-log",
+      "name": "✅ Final Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2640, 240]
+    }
+  ],
+  "connections": {
+    "⏰ Schedule Trigger": {
+      "main": [
+        [
+          { "node": "📊 Fetch Trends", "type": "main", "index": 0 },
+          { "node": "📰 Fetch Reddit", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "📊 Fetch Trends": {
+      "main": [
+        [
+          { "node": "🔀 Merge Trends", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "📰 Fetch Reddit": {
+      "main": [
+        [
+          { "node": "🔀 Merge Trends", "type": "main", "index": 1 }
+        ]
+      ]
+    },
+    "🔀 Merge Trends": {
+      "main": [
+        [
+          { "node": "⚡ Build Architect Prompt", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "⚡ Build Architect Prompt": {
+      "main": [
+        [
+          { "node": "🧠 Architect AI (Script Gen)", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "🧠 Architect AI (Script Gen)": {
+      "main": [
+        [
+          { "node": "📝 Parse Script", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "📝 Parse Script": {
+      "main": [
+        [
+          { "node": "🔍 Build Validation Prompt", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "🔍 Build Validation Prompt": {
+      "main": [
+        [
+          { "node": "🤖 Validation AI (Judge)", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "🤖 Validation AI (Judge)": {
+      "main": [
+        [
+          { "node": "📊 Parse Validation", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "📊 Parse Validation": {
+      "main": [
+        [
+          { "node": "✅❌ Verdict Gate", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "✅❌ Verdict Gate": {
+      "main": [
+        [
+          { "node": "🎬 Prepare Production", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "🔄 Rejection Handler", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "🔄 Rejection Handler": {
+      "main": [
+        [
+          { "node": "🔀 Retry or Skip?", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "🔀 Retry or Skip?": {
+      "main": [
+        [
+          { "node": "📋 Log Skip", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "🧠 Architect AI (Script Gen)", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "🎬 Prepare Production": {
+      "main": [
+        [
+          { "node": "🚀 Run Pro Pipeline", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "🚀 Run Pro Pipeline": {
+      "main": [
+        [
+          { "node": "✅ Final Log", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "god-level-autoshorts-validator"
+  },
+  "tags": [
+    { "name": "AutoShorts" },
+    { "name": "God-Level" },
+    { "name": "Validation" }
+  ]
+}

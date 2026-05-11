@@ -1,0 +1,10 @@
+output/
+temp/
+*.pyc
+__pycache__/
+.DS_Store
+config/config.yaml
+*.log
+config/youtube_token.json
+config/client_secrets.json
+ClawBot/config.yaml
