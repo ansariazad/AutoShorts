@@ -1,10 +1,23 @@
-output/
-temp/
-*.pyc
+# Python & Virtual Environments
 __pycache__/
-.DS_Store
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Node & Tauri Desktop Build Artifacts
+node_modules/
+dist/
+dist-ssr/
+*.local
+src-tauri/target/
+
+# Environment & Secrets
+.env
 config/config.yaml
-*.log
-config/youtube_token.json
-config/client_secrets.json
-ClawBot/config.yaml
+*.key
+*.pem
+
+# OS Metadata
+.DS_Store
